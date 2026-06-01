@@ -1164,10 +1164,12 @@ async function startOCR(input) {
   document.getElementById("ocrBar").style.width = "0%";
 
   try {
-    // Tesseract.jsで日本語OCRを実行する
+    // Tesseract.jsで日本語OCRを実行する（CDNパスを明示指定）
     const result = await Tesseract.recognize(file, "jpn", {
+      workerPath: "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js",
+      langPath:   "https://tessdata.projectnaptha.com/4.0.0",
+      corePath:   "https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core-simd-lstm.wasm.js",
       logger: m => {
-        // 進捗を進捗バーに反映する
         if (m.status === "recognizing text") {
           document.getElementById("ocrBar").style.width = Math.round(m.progress * 100) + "%";
         }
@@ -1197,7 +1199,13 @@ async function startOCR(input) {
 
   } catch (e) {
     document.getElementById("ocrProgress").style.display = "none";
-    showToast("読み取りに失敗しました。もう一度試してください。");
+    // エラーの種類によってメッセージを変える
+    if (e.message && e.message.includes("network")) {
+      showToast("通信エラー：インターネット接続を確認してください");
+    } else {
+      showToast("読み取りに失敗しました（" + (e.message || "不明なエラー") + "）");
+    }
+    console.error("OCRエラー:", e);
   }
 }
 
