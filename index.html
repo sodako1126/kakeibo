@@ -246,6 +246,78 @@
       padding: 40px 0; font-size: 0.9rem;
     }
 
+    /* ===== 予算タブ ===== */
+    .budget-card {
+      background: white; border-radius: 12px;
+      padding: 18px; box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      margin-bottom: 20px;
+    }
+    .budget-card h2 {
+      font-size: 0.9rem; color: #666; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      margin-bottom: 16px;
+    }
+
+    /* 予算設定の各行 */
+    .budget-set-item {
+      display: flex; align-items: center;
+      gap: 10px; padding: 8px 0;
+      border-bottom: 1px solid #f5f5f5;
+    }
+    .budget-set-item:last-child { border-bottom: none; }
+    .budget-set-icon {
+      width: 34px; height: 34px; border-radius: 8px;
+      display: flex; align-items: center;
+      justify-content: center; font-size: 1rem; flex-shrink: 0;
+    }
+    .budget-set-name { flex: 1; font-size: 0.9rem; color: #444; }
+    .budget-input {
+      width: 110px; padding: 6px 10px;
+      border: 1.5px solid #e0e0e0; border-radius: 8px;
+      font-size: 0.9rem; text-align: right;
+      color: #333; background: #fafafa;
+    }
+    .budget-input:focus { outline: none; border-color: #4a7c59; background: white; }
+
+    /* 予算保存ボタン */
+    .btn-save-budget {
+      width: 100%; padding: 11px;
+      background: #4a7c59; color: white;
+      border: none; border-radius: 8px;
+      font-size: 1rem; font-weight: 600;
+      cursor: pointer; margin-top: 14px;
+      transition: background 0.2s;
+    }
+    .btn-save-budget:hover { background: #3a6347; }
+
+    /* 予算進捗の各行 */
+    .budget-progress-item {
+      padding: 12px 0;
+      border-bottom: 1px solid #f5f5f5;
+    }
+    .budget-progress-item:last-child { border-bottom: none; }
+    .budget-progress-header {
+      display: flex; align-items: center;
+      gap: 8px; margin-bottom: 7px;
+    }
+    .budget-progress-name { flex: 1; font-size: 0.9rem; color: #444; }
+    .budget-progress-amount { font-size: 0.85rem; font-weight: 600; }
+    .budget-over-badge {
+      font-size: 0.7rem; background: #fdf0f0;
+      color: #d94f4f; border-radius: 4px;
+      padding: 1px 6px; font-weight: 600;
+    }
+
+    /* 進捗バー */
+    .progress-bar-bg {
+      height: 8px; background: #f0f0f0;
+      border-radius: 4px; overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%; border-radius: 4px;
+      transition: width 0.4s ease;
+    }
+
     /* ===== トースト通知 ===== */
     #toast {
       position: fixed; bottom: 24px; left: 50%;
@@ -293,8 +365,9 @@
 <!-- ===== タブナビ ===== -->
 <div style="background:white; box-shadow:0 1px 4px rgba(0,0,0,0.06);">
   <div class="tab-nav">
-    <button class="tab-btn active" id="tab-btn-list"  onclick="switchTab('list')">📋 明細</button>
-    <button class="tab-btn"        id="tab-btn-chart" onclick="switchTab('chart')">📊 グラフ</button>
+    <button class="tab-btn active" id="tab-btn-list"   onclick="switchTab('list')">📋 明細</button>
+    <button class="tab-btn"        id="tab-btn-chart"  onclick="switchTab('chart')">📊 グラフ</button>
+    <button class="tab-btn"        id="tab-btn-budget" onclick="switchTab('budget')">💰 予算</button>
   </div>
 </div>
 
@@ -396,6 +469,26 @@
 
   </div><!-- /グラフタブ -->
 
+  <!-- ===== 予算タブ ===== -->
+  <div id="content-budget" class="tab-content">
+
+    <!-- 今月の予算進捗 -->
+    <div class="budget-card">
+      <h2>📊 今月の予算進捗</h2>
+      <div id="budgetProgressList">
+        <div class="empty-message">予算がまだ設定されていません</div>
+      </div>
+    </div>
+
+    <!-- 予算設定フォーム -->
+    <div class="budget-card">
+      <h2>⚙️ 予算を設定する</h2>
+      <div id="budgetSetList"></div>
+      <button class="btn-save-budget" onclick="saveBudgetSettings()">保存する</button>
+    </div>
+
+  </div><!-- /予算タブ -->
+
 </main>
 
 <div id="toast"></div>
@@ -459,6 +552,9 @@ function loadRecords()       { return JSON.parse(localStorage.getItem("kakebo_re
 function saveRecords(r)      { localStorage.setItem("kakebo_records",  JSON.stringify(r)); }
 function loadLearnedMap()    { return JSON.parse(localStorage.getItem("kakebo_learned")  || "{}"); }
 function saveLearnedMap(m)   { localStorage.setItem("kakebo_learned",  JSON.stringify(m)); }
+// 予算データ：{ カテゴリID: 月の予算金額 } の形で保存
+function loadBudgets()       { return JSON.parse(localStorage.getItem("kakebo_budgets") || "{}"); }
+function saveBudgets(b)      { localStorage.setItem("kakebo_budgets", JSON.stringify(b)); }
 
 // =========================================================
 // 初期化
@@ -481,12 +577,12 @@ function todayString() {
 // タブ切り替え
 // =========================================================
 function switchTab(tab) {
-  document.getElementById("content-list").classList.toggle("active",  tab === "list");
-  document.getElementById("content-chart").classList.toggle("active", tab === "chart");
-  document.getElementById("tab-btn-list").classList.toggle("active",  tab === "list");
-  document.getElementById("tab-btn-chart").classList.toggle("active", tab === "chart");
-  // グラフタブに切り替えたときにグラフを描画
-  if (tab === "chart") renderCharts();
+  ["list", "chart", "budget"].forEach(t => {
+    document.getElementById("content-" + t).classList.toggle("active", t === tab);
+    document.getElementById("tab-btn-" + t).classList.toggle("active", t === tab);
+  });
+  if (tab === "chart")  renderCharts();
+  if (tab === "budget") renderBudgetTab();
 }
 
 // =========================================================
@@ -637,6 +733,10 @@ function addRecord() {
 
   renderList();
   renderSummary();
+
+  // 予算超過チェック：追加後にそのカテゴリが予算を超えていないか確認
+  if (currentType === "expense") checkBudgetAlert(catId);
+
   showToast("追加しました ✓");
 }
 
@@ -862,6 +962,113 @@ function renderBarChart() {
       }
     }
   });
+}
+
+// =========================================================
+// 予算管理
+// =========================================================
+
+// 予算タブ全体を描画する
+function renderBudgetTab() {
+  renderBudgetProgress();
+  renderBudgetSetForm();
+}
+
+// 今月の予算進捗を表示する
+function renderBudgetProgress() {
+  const budgets = loadBudgets();
+  const el = document.getElementById("budgetProgressList");
+
+  // 予算が設定されているカテゴリだけ表示
+  const setBudgets = CATEGORIES.expense.filter(cat => budgets[cat.id] > 0);
+
+  if (setBudgets.length === 0) {
+    el.innerHTML = `<div class="empty-message">予算がまだ設定されていません<br>下のフォームで設定してください</div>`;
+    return;
+  }
+
+  // 今月の支出をカテゴリごとに集計
+  const records = loadRecords().filter(r => {
+    const [y, m] = r.date.split("-").map(Number);
+    return y === currentYear && m === currentMonth && r.type === "expense";
+  });
+  const spent = {};
+  records.forEach(r => { spent[r.category] = (spent[r.category] || 0) + r.amount; });
+
+  el.innerHTML = setBudgets.map(cat => {
+    const budget  = budgets[cat.id];
+    const used    = spent[cat.id] || 0;
+    const pct     = Math.min(Math.round(used / budget * 100), 100);
+    const isOver  = used > budget;
+    const barColor = isOver ? "#d94f4f" : used / budget > 0.8 ? "#f57c00" : "#4a7c59";
+
+    return `
+      <div class="budget-progress-item">
+        <div class="budget-progress-header">
+          <div class="budget-set-icon" style="background:${cat.color}">${cat.icon}</div>
+          <div class="budget-progress-name">${cat.name}</div>
+          ${isOver ? `<span class="budget-over-badge">超過！</span>` : ""}
+          <div class="budget-progress-amount" style="color:${barColor}">
+            ¥${used.toLocaleString()} / ¥${budget.toLocaleString()}
+          </div>
+        </div>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" style="width:${pct}%; background:${barColor}"></div>
+        </div>
+      </div>`;
+  }).join("");
+}
+
+// 予算設定フォームを表示する
+function renderBudgetSetForm() {
+  const budgets = loadBudgets();
+  const el = document.getElementById("budgetSetList");
+
+  el.innerHTML = CATEGORIES.expense.map(cat => `
+    <div class="budget-set-item">
+      <div class="budget-set-icon" style="background:${cat.color}">${cat.icon}</div>
+      <div class="budget-set-name">${cat.name}</div>
+      <input class="budget-input" type="number" min="0" placeholder="未設定"
+             id="budget-input-${cat.id}"
+             value="${budgets[cat.id] || ""}"
+             inputmode="numeric">
+      <span style="font-size:0.82rem;color:#888;">円</span>
+    </div>`).join("");
+}
+
+// 予算を保存する
+function saveBudgetSettings() {
+  const budgets = {};
+  CATEGORIES.expense.forEach(cat => {
+    const val = parseInt(document.getElementById("budget-input-" + cat.id).value);
+    if (val > 0) budgets[cat.id] = val;
+  });
+  saveBudgets(budgets);
+  renderBudgetProgress(); // 進捗表示を更新
+  showToast("予算を保存しました ✓");
+}
+
+// 予算超過を確認してアラートを出す
+function checkBudgetAlert(catId) {
+  const budgets = loadBudgets();
+  if (!budgets[catId]) return; // そのカテゴリに予算が設定されていなければ何もしない
+
+  // 今月のそのカテゴリの合計支出を計算
+  const total = loadRecords()
+    .filter(r => {
+      const [y, m] = r.date.split("-").map(Number);
+      return y === currentYear && m === currentMonth && r.type === "expense" && r.category === catId;
+    })
+    .reduce((s, r) => s + r.amount, 0);
+
+  const cat = getCategoryById(catId);
+  if (total > budgets[catId]) {
+    // 超過していたら警告トーストを表示
+    setTimeout(() => showToast(`⚠️ ${cat.name}の予算を超えました！`), 400);
+  } else if (total / budgets[catId] > 0.8) {
+    // 80%以上使ったら注意トーストを表示
+    setTimeout(() => showToast(`📢 ${cat.name}の予算残りわずかです`), 400);
+  }
 }
 
 // =========================================================
