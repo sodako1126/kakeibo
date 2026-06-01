@@ -6,6 +6,8 @@
   <title>家計簿</title>
   <!-- グラフ描画ライブラリ Chart.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <!-- OCRライブラリ Tesseract.js（レシート読み取り用） -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <style>
     /* ===== 全体のスタイル ===== */
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -279,6 +281,36 @@
     }
     .budget-input:focus { outline: none; border-color: #4a7c59; background: white; }
 
+    /* ===== Gmail連携取込ボタン ===== */
+    .sync-card {
+      background: white; border-radius: 12px;
+      padding: 18px; box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      margin-bottom: 20px;
+    }
+    .sync-card h2 {
+      font-size: 0.9rem; color: #666; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      margin-bottom: 12px;
+    }
+    .sync-desc { font-size: 0.85rem; color: #888; margin-bottom: 14px; line-height: 1.6; }
+    .btn-sync {
+      width: 100%; padding: 11px;
+      background: #1a73e8; color: white;
+      border: none; border-radius: 8px;
+      font-size: 1rem; font-weight: 600;
+      cursor: pointer; transition: background 0.2s;
+    }
+    .btn-sync:hover { background: #1557b0; }
+    .btn-sync:disabled { background: #aaa; cursor: not-allowed; }
+    .sync-result {
+      margin-top: 12px; padding: 10px 14px;
+      border-radius: 8px; font-size: 0.88rem;
+      display: none;
+    }
+    .sync-result.success { background: #e8f5e9; color: #2a7d4f; }
+    .sync-result.info    { background: #e3f2fd; color: #1a73e8; }
+    .sync-result.error   { background: #fdf0f0; color: #d94f4f; }
+
     /* 予算保存ボタン */
     .btn-save-budget {
       width: 100%; padding: 11px;
@@ -338,6 +370,64 @@
       .chart-wrapper { height: 220px; }
     }
 
+    /* ===== レシート読み取り ===== */
+    .receipt-area {
+      border: 2px dashed #d0d0d0; border-radius: 10px;
+      padding: 20px; text-align: center;
+      margin-bottom: 14px; cursor: pointer;
+      transition: border-color 0.2s; background: #fafafa;
+    }
+    .receipt-area:hover { border-color: #4a7c59; }
+    .receipt-area input[type="file"] { display: none; }
+    .receipt-area .receipt-icon { font-size: 2rem; margin-bottom: 8px; }
+    .receipt-area .receipt-label { font-size: 0.88rem; color: #888; }
+
+    .ocr-progress {
+      display: none; text-align: center;
+      padding: 16px; font-size: 0.88rem; color: #666;
+    }
+    .ocr-progress .progress-bar-bg { margin-top: 10px; }
+
+    .receipt-preview {
+      display: none; margin-bottom: 14px;
+    }
+    .receipt-preview img {
+      width: 100%; max-height: 200px;
+      object-fit: cover; border-radius: 8px;
+    }
+
+    /* 読み取り結果フォーム */
+    .ocr-result-form { display: none; }
+    .ocr-result-form h3 {
+      font-size: 0.85rem; color: #666;
+      margin-bottom: 10px; font-weight: 600;
+    }
+
+    /* 重複警告 */
+    .duplicate-warning {
+      display: none;
+      background: #fff8e1; border: 1.5px solid #f9a825;
+      border-radius: 8px; padding: 10px 14px;
+      font-size: 0.85rem; color: #795548;
+      margin-bottom: 12px; line-height: 1.6;
+    }
+
+    .btn-receipt-add {
+      width: 100%; padding: 11px;
+      background: #4a7c59; color: white;
+      border: none; border-radius: 8px;
+      font-size: 1rem; font-weight: 600;
+      cursor: pointer; margin-top: 4px;
+      transition: background 0.2s;
+    }
+    .btn-receipt-add:hover { background: #3a6347; }
+    .btn-receipt-reset {
+      width: 100%; padding: 9px;
+      background: none; color: #888;
+      border: 1.5px solid #e0e0e0; border-radius: 8px;
+      font-size: 0.9rem; cursor: pointer; margin-top: 8px;
+    }
+
     /* iOSのdateインプットがはみ出るのを防ぐ */
     input[type="date"] {
       -webkit-appearance: none;
@@ -365,9 +455,10 @@
 <!-- ===== タブナビ ===== -->
 <div style="background:white; box-shadow:0 1px 4px rgba(0,0,0,0.06);">
   <div class="tab-nav">
-    <button class="tab-btn active" id="tab-btn-list"   onclick="switchTab('list')">📋 明細</button>
-    <button class="tab-btn"        id="tab-btn-chart"  onclick="switchTab('chart')">📊 グラフ</button>
-    <button class="tab-btn"        id="tab-btn-budget" onclick="switchTab('budget')">💰 予算</button>
+    <button class="tab-btn active" id="tab-btn-list"    onclick="switchTab('list')">📋 明細</button>
+    <button class="tab-btn"        id="tab-btn-receipt" onclick="switchTab('receipt')">📷 レシート</button>
+    <button class="tab-btn"        id="tab-btn-chart"   onclick="switchTab('chart')">📊 グラフ</button>
+    <button class="tab-btn"        id="tab-btn-budget"  onclick="switchTab('budget')">💰 予算</button>
   </div>
 </div>
 
@@ -428,6 +519,14 @@
       <button class="btn-add" onclick="addRecord()">＋ 追加する</button>
     </div>
 
+    <!-- Gmail連携取込 -->
+    <div class="sync-card">
+      <h2>🔗 Gmail連携 自動取込</h2>
+      <div class="sync-desc">楽天ペイ・Appleサブスクの新しいデータをスプレッドシートから取り込みます。</div>
+      <button class="btn-sync" onclick="syncFromSheet()">📥 新しいデータを取り込む</button>
+      <div class="sync-result" id="syncResult"></div>
+    </div>
+
     <!-- 明細リスト -->
     <div class="list-card">
       <div class="list-header">
@@ -440,6 +539,71 @@
     </div>
 
   </div><!-- /明細タブ -->
+
+  <!-- ===== レシートタブ ===== -->
+  <div id="content-receipt" class="tab-content">
+    <div class="form-card">
+      <h2>📷 レシート・スクショ読み取り</h2>
+
+      <!-- 画像選択エリア -->
+      <div class="receipt-area" onclick="document.getElementById('receiptFile').click()">
+        <div class="receipt-icon">📄</div>
+        <div class="receipt-label">タップして写真を選ぶ<br>（レシートまたはSuicaのスクショ）</div>
+        <input type="file" id="receiptFile" accept="image/*" capture="environment"
+               onchange="startOCR(this)">
+      </div>
+
+      <!-- プレビュー画像 -->
+      <div class="receipt-preview" id="receiptPreview">
+        <img id="previewImg" src="" alt="プレビュー">
+      </div>
+
+      <!-- OCR進捗 -->
+      <div class="ocr-progress" id="ocrProgress">
+        🔍 画像を読み取っています...
+        <div class="progress-bar-bg" style="margin-top:10px">
+          <div class="progress-bar-fill" id="ocrBar" style="width:0%;background:#4a7c59;transition:width 0.3s"></div>
+        </div>
+      </div>
+
+      <!-- 読み取り結果フォーム -->
+      <div class="ocr-result-form" id="ocrResultForm">
+        <h3>読み取り結果を確認してください</h3>
+
+        <!-- 重複警告 -->
+        <div class="duplicate-warning" id="duplicateWarning">
+          ⚠️ <strong>重複の可能性があります</strong><br>
+          <span id="duplicateDetail"></span><br>
+          楽天ペイで既に取り込まれているかもしれません。確認してから追加してください。
+        </div>
+
+        <div class="form-row">
+          <div>
+            <label>日付</label>
+            <input type="date" id="ocrDate">
+          </div>
+          <div>
+            <label>金額（円）</label>
+            <input type="number" id="ocrAmount" min="0">
+          </div>
+        </div>
+        <div class="form-row">
+          <div>
+            <label>メモ</label>
+            <input type="text" id="ocrMemo" placeholder="お店名など">
+          </div>
+          <div>
+            <label>カテゴリ</label>
+            <select id="ocrCategory"></select>
+          </div>
+        </div>
+
+        <button class="btn-receipt-add" onclick="addReceiptRecord()">＋ この内容で追加する</button>
+        <button class="btn-receipt-reset" onclick="resetReceipt()">やり直す</button>
+      </div>
+
+    </div>
+  </div><!-- /レシートタブ -->
 
   <!-- ===== グラフタブ ===== -->
   <div id="content-chart" class="tab-content">
@@ -577,12 +741,13 @@ function todayString() {
 // タブ切り替え
 // =========================================================
 function switchTab(tab) {
-  ["list", "chart", "budget"].forEach(t => {
+  ["list", "receipt", "chart", "budget"].forEach(t => {
     document.getElementById("content-" + t).classList.toggle("active", t === tab);
     document.getElementById("tab-btn-" + t).classList.toggle("active", t === tab);
   });
-  if (tab === "chart")  renderCharts();
-  if (tab === "budget") renderBudgetTab();
+  if (tab === "chart")   renderCharts();
+  if (tab === "budget")  renderBudgetTab();
+  if (tab === "receipt") buildOcrCategorySelect();
 }
 
 // =========================================================
@@ -962,6 +1127,257 @@ function renderBarChart() {
       }
     }
   });
+}
+
+// =========================================================
+// レシート・スクショ読み取り（OCR）
+// =========================================================
+
+// カテゴリ選択肢を作る（レシートタブ用）
+function buildOcrCategorySelect() {
+  const sel = document.getElementById("ocrCategory");
+  if (sel.options.length > 0) return; // すでに作成済みならスキップ
+  [...CATEGORIES.expense, ...CATEGORIES.income].forEach(cat => {
+    const opt = document.createElement("option");
+    opt.value = cat.id;
+    opt.textContent = cat.icon + " " + cat.name;
+    sel.appendChild(opt);
+  });
+}
+
+// 画像が選ばれたらOCRを開始する
+async function startOCR(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  // プレビュー画像を表示する
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById("previewImg").src = e.target.result;
+    document.getElementById("receiptPreview").style.display = "block";
+  };
+  reader.readAsDataURL(file);
+
+  // 進捗バーを表示する
+  document.getElementById("ocrProgress").style.display = "block";
+  document.getElementById("ocrResultForm").style.display = "none";
+  document.getElementById("ocrBar").style.width = "0%";
+
+  try {
+    // Tesseract.jsで日本語OCRを実行する
+    const result = await Tesseract.recognize(file, "jpn", {
+      logger: m => {
+        // 進捗を進捗バーに反映する
+        if (m.status === "recognizing text") {
+          document.getElementById("ocrBar").style.width = Math.round(m.progress * 100) + "%";
+        }
+      }
+    });
+
+    const text = result.data.text;
+    document.getElementById("ocrProgress").style.display = "none";
+
+    // 読み取ったテキストから日付と金額を抽出する
+    const date   = extractDate(text);
+    const amount = extractAmount(text);
+
+    // 結果フォームに反映する
+    document.getElementById("ocrDate").value   = date || todayString();
+    document.getElementById("ocrAmount").value = amount || "";
+    document.getElementById("ocrMemo").value   = "";
+    document.getElementById("ocrResultForm").style.display = "block";
+
+    // 重複チェック：同じ日付・金額のデータが既にないか確認する
+    if (date && amount) checkDuplicate(date, amount);
+
+  } catch (e) {
+    document.getElementById("ocrProgress").style.display = "none";
+    showToast("読み取りに失敗しました。もう一度試してください。");
+  }
+}
+
+// テキストから日付を抽出する
+function extractDate(text) {
+  // 「2026/06/01」「2026-06-01」「26.06.01」などのパターン
+  const patterns = [
+    /(\d{4})[\/\-年](\d{1,2})[\/\-月](\d{1,2})/,
+    /(\d{2})[\/\-\.](\d{2})[\/\-\.](\d{2})/,
+  ];
+  for (const pat of patterns) {
+    const m = text.match(pat);
+    if (m) {
+      let y = m[1].length === 2 ? "20" + m[1] : m[1];
+      return `${y}-${String(m[2]).padStart(2,"0")}-${String(m[3]).padStart(2,"0")}`;
+    }
+  }
+  return null;
+}
+
+// テキストから合計金額を抽出する
+function extractAmount(text) {
+  // 「合計」「お会計」「小計」「TOTAL」の近くにある金額を優先して探す
+  const keywordPatterns = [
+    /合計[^\d]*[\¥￥]?\s*([\d,]+)/,
+    /お会計[^\d]*[\¥￥]?\s*([\d,]+)/,
+    /小計[^\d]*[\¥￥]?\s*([\d,]+)/,
+    /TOTAL[^\d]*[\¥￥]?\s*([\d,]+)/i,
+    /[\¥￥]([\d,]{3,})/,
+  ];
+  for (const pat of keywordPatterns) {
+    const m = text.match(pat);
+    if (m) {
+      const val = parseInt(m[1].replace(/,/g, ""));
+      if (val > 0) return val;
+    }
+  }
+  return null;
+}
+
+// 重複チェック：同じ日付・金額のデータが既にないか確認する
+function checkDuplicate(date, amount) {
+  const records = loadRecords();
+  const warn    = document.getElementById("duplicateWarning");
+  const detail  = document.getElementById("duplicateDetail");
+
+  // 同じ日付（±1日）・同じ金額（±10円）のデータを探す
+  const dDate = new Date(date).getTime();
+  const found = records.find(r => {
+    const rDate = new Date(r.date).getTime();
+    const dayDiff = Math.abs(dDate - rDate) / (1000 * 60 * 60 * 24);
+    const amtDiff = Math.abs(r.amount - amount);
+    return dayDiff <= 1 && amtDiff <= 10 && r.type === "expense";
+  });
+
+  if (found) {
+    const cat = getCategoryById(found.category);
+    detail.textContent = `${found.date} に ¥${found.amount.toLocaleString()} (${found.memo}) が登録されています。`;
+    warn.style.display = "block";
+  } else {
+    warn.style.display = "none";
+  }
+}
+
+// レシートの内容を家計簿に追加する
+function addReceiptRecord() {
+  const date   = document.getElementById("ocrDate").value;
+  const amount = parseInt(document.getElementById("ocrAmount").value);
+  const memo   = document.getElementById("ocrMemo").value.trim();
+  const catId  = document.getElementById("ocrCategory").value;
+
+  if (!date)              { showToast("日付を入力してください"); return; }
+  if (!amount || amount <= 0) { showToast("正しい金額を入力してください"); return; }
+
+  const records = loadRecords();
+  records.push({
+    id:       Date.now(),
+    type:     "expense",
+    date:     date,
+    amount:   amount,
+    memo:     memo || "（レシート取込）",
+    category: catId
+  });
+  saveRecords(records);
+  renderList();
+  renderSummary();
+
+  showToast("追加しました ✓");
+  resetReceipt();
+  switchTab("list"); // 明細タブに戻る
+}
+
+// レシートフォームをリセットする
+function resetReceipt() {
+  document.getElementById("receiptFile").value       = "";
+  document.getElementById("receiptPreview").style.display  = "none";
+  document.getElementById("ocrResultForm").style.display   = "none";
+  document.getElementById("ocrProgress").style.display     = "none";
+  document.getElementById("duplicateWarning").style.display = "none";
+  document.getElementById("ocrBar").style.width = "0%";
+}
+
+// =========================================================
+// Gmail連携：スプレッドシートから取込む
+// =========================================================
+
+// ★スプレッドシートの公開CSVのURL★
+const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS1ucxLY49CLsejZ7t_WEkN-o31wsYPy01KBbT-X50gr_JbOXcVKgUGKpSVFIeO5ngEkn63sOZP13o7/pub?gid=1632236753&single=true&output=csv";
+
+// スプレッドシートから新しいデータを取り込む
+async function syncFromSheet() {
+  const btn    = document.querySelector(".btn-sync");
+  const result = document.getElementById("syncResult");
+
+  btn.disabled    = true;
+  btn.textContent = "⏳ 確認中...";
+  result.style.display = "none";
+
+  try {
+    // CSVを取得する
+    const response = await fetch(SHEET_CSV_URL);
+    if (!response.ok) throw new Error("データの取得に失敗しました");
+    const csvText = await response.text();
+
+    // CSVを行に分割して解析する
+    const lines = csvText.trim().split("\n").slice(1); // 1行目はヘッダーなのでスキップ
+    if (lines.length === 0 || (lines.length === 1 && lines[0].trim() === "")) {
+      showSyncResult("info", "スプレッドシートにまだデータがありません。楽天ペイを使うと自動で追加されます。");
+      return;
+    }
+
+    const records    = loadRecords();
+    const existingIds = new Set(records.map(r => String(r.id)));
+    let   addCount   = 0;
+
+    lines.forEach(line => {
+      if (!line.trim()) return;
+
+      // CSV の各列を取り出す（カンマで分割、ダブルクォートを除去）
+      const cols = line.split(",").map(c => c.replace(/^"|"$/g, "").trim());
+      if (cols.length < 6) return;
+
+      const [id, date, amount, memo, category, source] = cols;
+      if (!id || !date || !amount) return;
+
+      // 既に取り込み済みのIDはスキップ
+      if (existingIds.has(id)) return;
+
+      // 新しい記録として追加する
+      records.push({
+        id:       Number(id),
+        type:     "expense",
+        date:     date,
+        amount:   parseInt(amount) || 0,
+        memo:     memo || "（自動取込）",
+        category: category || "other_exp",
+        source:   source || ""
+      });
+      addCount++;
+    });
+
+    saveRecords(records);
+    renderList();
+    renderSummary();
+
+    if (addCount > 0) {
+      showSyncResult("success", `✓ ${addCount}件の新しいデータを取り込みました！`);
+    } else {
+      showSyncResult("info", "新しいデータはありませんでした。");
+    }
+
+  } catch (e) {
+    showSyncResult("error", "エラー：" + e.message);
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = "📥 新しいデータを取り込む";
+  }
+}
+
+// 取込結果メッセージを表示する
+function showSyncResult(type, msg) {
+  const el = document.getElementById("syncResult");
+  el.className     = "sync-result " + type;
+  el.textContent   = msg;
+  el.style.display = "block";
 }
 
 // =========================================================
