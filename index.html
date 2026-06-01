@@ -1287,6 +1287,12 @@ function checkDuplicate(date, amount) {
   }
 }
 
+// 病院の明細書かどうかをテキストから判定する
+function detectMedical(text) {
+  const keywords = ["一部負担金", "自己負担", "診療", "処方", "調剤", "病院", "クリニック", "医院", "保険点数", "診察料"];
+  return keywords.some(kw => text.includes(kw));
+}
+
 // レシートの内容を家計簿に追加する
 function addReceiptRecord() {
   const date   = document.getElementById("ocrDate").value;
