@@ -1178,17 +1178,22 @@ async function startOCR(input) {
     document.getElementById("ocrProgress").style.display = "none";
 
     // 読み取ったテキストから日付と金額を抽出する
-    const date   = extractDate(text);
-    const amount = extractAmount(text);
+    const date     = extractDate(text);
+    const amount   = extractAmount(text);
+    const isMedical = detectMedical(text); // 病院明細書かどうかを判定する
 
     // 結果フォームに反映する
     document.getElementById("ocrDate").value   = date || todayString();
     document.getElementById("ocrAmount").value = amount || "";
-    document.getElementById("ocrMemo").value   = "";
+    document.getElementById("ocrMemo").value   = isMedical ? "病院" : "";
+    // 病院明細書なら自動でカテゴリを「医療費」にする
+    if (isMedical) document.getElementById("ocrCategory").value = "medical";
     document.getElementById("ocrResultForm").style.display = "block";
 
     // 重複チェック：同じ日付・金額のデータが既にないか確認する
     if (date && amount) checkDuplicate(date, amount);
+    // 病院明細書なら通知する
+    if (isMedical) showToast("🏥 病院の明細書を検出しました");
 
   } catch (e) {
     document.getElementById("ocrProgress").style.display = "none";
@@ -1215,7 +1220,24 @@ function extractDate(text) {
 
 // テキストから合計金額を抽出する
 function extractAmount(text) {
-  // 「合計」「お会計」「小計」「TOTAL」の近くにある金額を優先して探す
+  // 病院の明細書専用キーワードを最優先で探す
+  const medicalPatterns = [
+    /一部負担金[^\d]*[\¥￥]?\s*([\d,]+)/,
+    /自己負担額[^\d]*[\¥￥]?\s*([\d,]+)/,
+    /自己負担金[^\d]*[\¥￥]?\s*([\d,]+)/,
+    /患者負担額[^\d]*[\¥￥]?\s*([\d,]+)/,
+    /本日の請求額[^\d]*[\¥￥]?\s*([\d,]+)/,
+    /お支払い額[^\d]*[\¥￥]?\s*([\d,]+)/,
+  ];
+  for (const pat of medicalPatterns) {
+    const m = text.match(pat);
+    if (m) {
+      const val = parseInt(m[1].replace(/,/g, ""));
+      if (val > 0) return val;
+    }
+  }
+
+  // 通常のレシート用キーワード
   const keywordPatterns = [
     /合計[^\d]*[\¥￥]?\s*([\d,]+)/,
     /お会計[^\d]*[\¥￥]?\s*([\d,]+)/,
