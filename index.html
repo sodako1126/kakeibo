@@ -262,9 +262,20 @@
       .summary-cards { gap: 8px; }
       .summary-card { padding: 10px 8px; }
       .summary-card .amount { font-size: 0.95rem; }
-      .form-row { grid-template-columns: 1fr; }
+      .form-row { grid-template-columns: minmax(0,1fr); }
       .chart-wrapper { height: 220px; }
     }
+
+    /* iOSのdateインプットがはみ出るのを防ぐ */
+    input[type="date"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      min-width: 0;
+    }
+
+    /* フォームカード内の要素が絶対にはみ出ないようにする */
+    .form-card { overflow: hidden; }
   </style>
 </head>
 <body>
